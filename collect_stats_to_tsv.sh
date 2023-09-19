@@ -5,7 +5,7 @@
 # of the results
 
 # USAGE:
-# collect_stats_to_tsv.sh subject_id freesurfer_dir fmriprep.sif
+# collect_stats_to_tsv.sh subject_id freesurfer_dir fmriprep.sif neuromaps.sif
 #
 #
 # subject_id:     The subject identifier. Must start with sub-. Could
@@ -21,11 +21,18 @@
 #                 containing the fmriprep used to create the
 #                 freesurfer data. Maybe a regular freesurfer sif
 #                 would work, but I haven't tested it
+#
+# neuromaps.sif:  Full path to the singularity/apptainer SIF file
+#                 containing neuromaps. This will be used to create
+#                 the final cifti files
+
 
 #get input for this run
 subject_id=$1
 fs_root=$2
 fmriprep_sif=$3
+neuromaps_container=$4
+
 export SUBJECTS_DIR=${fs_root}
 subject_fs=${SUBJECTS_DIR}/${subject_id}
 
@@ -33,6 +40,12 @@ subject_fs=${SUBJECTS_DIR}/${subject_id}
 SCRIPT_DIR=$(basedir $0)
 annots_dir=${SCRIPT_DIR}/annots
 combine_script=${SCRIPT_DIR}/compile_freesurfer_stats.py
+to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
+subject_fs=${fs_root}/${subject_id}
+
+# CUBIC-specific stuff needed for LGI to be run outside of a container
+export SUBJECTS_DIR=${fs_root}
+subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 workdir=${subject_fs}
 export APPTAINERENV_OMP_NUM_THREADS=1
@@ -40,7 +53,10 @@ export APPTAINERENV_NSLOTS=1
 export APPTAINERENV_ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
 export APPTAINERENV_SUBJECTS_DIR=${SUBJECTS_DIR}
 export APPTAINER_TMPDIR=${SINGULARITY_TMPDIR}
-singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${FREESURFER_HOME}/license.txt:/opt/freesurfer/license.txt ${fmriprep_sif}"
+# We're using the subject's trash directory as a temp dir for neuromaps data
+export APPTAINERENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash
+
+singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${HOME}/license.txt:/opt/freesurfer/license.txt ${fmriprep_sif}"
 
 # Special atlases that we need to warp from fsaverage to native
 parcs="AAL CC200 CC400 glasser gordon333dil HOCPATh25 Juelich PALS_B12_Brodmann Schaefer2018_1000Parcels_17Networks_order Schaefer2018_1000Parcels_7Networks_order Schaefer2018_100Parcels_17Networks_order Schaefer2018_100Parcels_7Networks_order Schaefer2018_200Parcels_17Networks_order Schaefer2018_200Parcels_7Networks_order Schaefer2018_300Parcels_17Networks_order Schaefer2018_300Parcels_7Networks_order Schaefer2018_400Parcels_17Networks_order Schaefer2018_400Parcels_7Networks_order Schaefer2018_500Parcels_17Networks_order Schaefer2018_500Parcels_7Networks_order Schaefer2018_600Parcels_17Networks_order Schaefer2018_600Parcels_7Networks_order Schaefer2018_700Parcels_17Networks_order Schaefer2018_700Parcels_7Networks_order Schaefer2018_800Parcels_17Networks_order Schaefer2018_800Parcels_7Networks_order Schaefer2018_900Parcels_17Networks_order Schaefer2018_900Parcels_7Networks_order Slab Yeo2011_17Networks_N1000 Yeo2011_7Networks_N1000"
@@ -48,6 +64,9 @@ parcs="AAL CC200 CC400 glasser gordon333dil HOCPATh25 Juelich PALS_B12_Brodmann 
 # Atlases that come from freesurfer and are already in fsnative
 native_parcs="aparc.DKTatlas aparc.a2009s aparc BA_exvivo"
 
+# CUBIC-specific stuff needed for LGI to be run outside of a container
+export SUBJECTS_DIR=${fs_root}
+subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 # Perform the mapping from fsaverage to native
 for hemi in lh rh; do
@@ -95,8 +114,45 @@ for hemi in lh rh; do
     done
 done
 
+# Create the tsv files and jsons
+python ${combine_script} ${subject_id}
+
 # Run qcache on this person to get the mgh files
 ${singularity_cmd} recon-all -s ${subject_id} -qcache
 
-# Create the tsv files and jsons
-python ${combine_script} ${subject_id}
+# Run the lGI stuff on it. NOTE: this is not done with a container
+# because it requires matlab :(
+# CUBIC-specific stuff needed for LGI to be run outside of a container
+module load freesurfer/7.2.0
+source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
+export SUBJECTS_DIR=${fs_root}
+recon-all -s ${subject_id} -localGI
+
+# It may fail the first time, so try running it again:
+if [ $? -gt 0 ]; then
+    recon-all -s ${subject_id} -localGI
+fi
+
+# Get these into MGH
+${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
+
+# Big picture here: get these mgh metrics into cifti format
+# first we have to export them from mgh to gifti. We'll use freesurfer for this
+# but it will create malformed gifti files.
+cd ${subject_fs}/surf
+for hemi in lh rh
+do
+    for mgh_surf in ${hemi}*fsaverage.mgh
+    do
+        ${singularity_cmd} mris_convert \
+            -c ${PWD}/${mgh_surf} \
+            ${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
+            ${PWD}/${mgh_surf/.mgh/.malformed.shape.gii}
+    done
+done
+
+# Finally, use neuromaps to go from fsaverage to fsLR164k.
+neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${to_cifti_script} ${neuromaps_sif}"
+${neuromaps_singularity_cmd} \
+  python ${to_cifti_script} \
+  ${subject_fs}
