@@ -39,7 +39,7 @@ subject_fs=${SUBJECTS_DIR}/${subject_id}
 # Local data
 SCRIPT_DIR=$(basedir $0)
 annots_dir=${SCRIPT_DIR}/annots
-combine_script=${SCRIPT_DIR}/compile_freesurfer_stats.py
+parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
 subject_fs=${fs_root}/${subject_id}
 
@@ -64,9 +64,6 @@ parcs="AAL CC200 CC400 glasser gordon333dil HOCPATh25 Juelich PALS_B12_Brodmann 
 # Atlases that come from freesurfer and are already in fsnative
 native_parcs="aparc.DKTatlas aparc.a2009s aparc BA_exvivo"
 
-# CUBIC-specific stuff needed for LGI to be run outside of a container
-export SUBJECTS_DIR=${fs_root}
-subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 # Perform the mapping from fsaverage to native
 for hemi in lh rh; do
@@ -85,6 +82,24 @@ for hemi in lh rh; do
                 --tval ${native_annot}
     done
 done
+
+# Run qcache on this person to get the mgh files
+${singularity_cmd} recon-all -s ${subject_id} -qcache
+
+# Run the lGI stuff on it. NOTE: this is not done with a container
+# because it requires matlab :(
+# CUBIC-specific stuff needed for LGI to be run outside of a container
+module load freesurfer/7.2.0
+source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
+export SUBJECTS_DIR=${fs_root}
+subject_fs=${SUBJECTS_DIR}/${subject_id}
+
+recon-all -s ${subject_id} -localGI
+
+# It may fail the first time, so try running it again:
+if [ $? -gt 0 ]; then
+    recon-all -s ${subject_id} -localGI
+fi
 
 # create the .stats files for each annot file
 for hemi in lh rh; do
@@ -111,27 +126,21 @@ for hemi in lh rh; do
                 --annot ${subject_id} ${hemi} ${parc} \
                 --sum ${subject_fs}/stats/${hemi}.${parc}.w-g.pct.stats \
                 --snr
+
+            # LGI stats
+            ${singularity_cmd} \
+                mri_segstats \
+                --annot ${subject_id} ${hemi} ${parc} \
+                --in ${subject_fs}/surf/${hemi}.pial_lgi \
+                --sum ${subject_fs}/stats/${hemi}.${parc}.pial_lgi.stats
+
     done
 done
 
-# Create the tsv files and jsons
-python ${combine_script} ${subject_id}
+# Create the tsvs for the regional stats from the parcellations
+python ${parcstats_to_tsv_script} ${subject_id}
 
-# Run qcache on this person to get the mgh files
-${singularity_cmd} recon-all -s ${subject_id} -qcache
 
-# Run the lGI stuff on it. NOTE: this is not done with a container
-# because it requires matlab :(
-# CUBIC-specific stuff needed for LGI to be run outside of a container
-module load freesurfer/7.2.0
-source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
-export SUBJECTS_DIR=${fs_root}
-recon-all -s ${subject_id} -localGI
-
-# It may fail the first time, so try running it again:
-if [ $? -gt 0 ]; then
-    recon-all -s ${subject_id} -localGI
-fi
 
 # Get these into MGH
 ${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
