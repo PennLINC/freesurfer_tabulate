@@ -82,11 +82,14 @@ def read_stats(stats_name, source_id, info, get_measures=False, measures_only=Fa
 
     if not measures_only:
         # Get it into a nice form
-        stats_df['FlatName'] = stats_df['StructName'] + '_' + stats_df['variable'] + "_" \
-            + source_id + suffix
+        stats_df['FlatName'] = stats_df['StructName'] + '_' + stats_df['variable']
 
         for _, row in stats_df.iterrows():
-            col_name = row['FlatName'].replace("-", "_")
+            col_name = row['FlatName'].replace(
+                "-", "_").replace(
+                "3rd", "Third").replace(
+                "4th", "Fourth").replace(
+                "5th", "Fifth")
             if col_name in info:
                 raise Exception(f"{col_name} is already present in the collected data")
             info[col_name] = {
@@ -133,61 +136,46 @@ def get_stat_measures(stats_file, suffix, info, stats_name):
                 "value": float(value),
                 "meta": ("This is a whole-brain metadata measure with two "
                          f'possible labels, "{pt1}" and "{pt2}". It comes '
-                         f"from stats/{stats_name} file.")}
+                         f"from the stats/{stats_name} file.")}
 
 
-def create_tabular_data(subject_id, session_id, fs_dirname):
+if __name__ == "__main__":
+    fs_dirname = sys.argv[1]
 
-    in_dir = os.path.join(subjects_dir, subject_id)
-    stats_dir = os.path.join(in_dir, "stats")
+    session_id = None
+    subject_id = fs_dirname
+    if "_" in fs_dirname:
+        subject_id, session_id = fs_dirname.split("_")
 
     fs_audit = {
         "subject_id": {"value": subject_id,
-                    "meta": "BIDS subject id"},
+                       "meta": "BIDS subject id"},
         "session_id": {"value": session_id,
-                    "meta": "BIDS session id"}
+                       "meta": "BIDS session id"}
     }
-
     fs_audit.update(get_euler_from_log(subject_id))
 
     # Add global stats from two of the surface stats files
     read_stats("lh.aparc.pial.stats", "Pial", fs_audit,
-            get_measures=True, measures_only=True)
+               get_measures=True, measures_only=True)
     read_stats("rh.aparc.pial.stats", "Pial", fs_audit,
-            get_measures=True, measures_only=True)
+               get_measures=True, measures_only=True)
 
     # And grab the volume stats from aseg
     read_stats("aseg.stats", "aseg", fs_audit, get_measures=True)
 
-    pd.DataFrame([fs_audit]).to_csv(str(output_dir / (subid + "audit.csv")))
-    def get_euler_from_log(subject_id):
+    # Remove SegId, it's the same for everyone
+    for key in list(fs_audit.keys()):
+        if "SegId" in key:
+            del fs_audit[key]
 
-        reconlog = fs_root / subject_id / "scripts" / "recon-all.log"
-        with reconlog.open("r") as reconlogf:
-            log_lines = [line.strip() for line in reconlogf]
+    out_tsv = fs_root / (fs_dirname + "_metadata.tsv")
+    out_json = fs_root / (fs_dirname + "_metadata.json")
 
-        def read_qc(target_str):
-            data, = [line for line in log_lines if target_str in line]
-            data = data.replace(",", "")
-            tokens = data.split()
-            rh_val = float(tokens[-1])
-            lh_val = float(tokens[-4])
-            return rh_val, lh_val
+    metadata = {key: value["meta"] for key, value in fs_audit.items()}
+    with out_json.open("w") as jsonf:
+        json.dump(metadata, jsonf, indent=2)
 
-        rh_euler, lh_euler = read_qc("lheno")
-        rh_holes, lh_holes = read_qc("lhholes")
-        return {"lh_euler": {"value": lh_euler,
-                            "meta": "Left hemisphere Euler number from recon-all.log"},
-                "rh_euler": {"value": rh_euler,
-                            "meta": "Right hemisphere Euler number from recon-all.log"},
-                "lh_holes": {"value": lh_holes,
-                            "meta": "Left hemisphere number of holes from recon-all.log"},
-                "rh_holes": {"value": rh_holes,
-                            "meta": "Right hemisphere number of holes from recon-all.log"}
-            }
-
-if __name__ == "__main__":
-    fs_dirname = sys.argv[1]
-    subject_id = sys.argv[2]
-    session_id = sys.argv[3]
-
+    real_data = {key: value['value'] for key,value in fs_audit.items()}
+    data_df = pd.DataFrame([real_data])
+    data_df.to_csv(out_tsv, sep="\t", index=False)
