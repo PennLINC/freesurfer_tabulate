@@ -2,6 +2,7 @@
 import os
 import sys
 import pandas as pd
+import numpy as np
 
 hemispheres = ["lh", "rh"]
 NOSUFFIX_COLS = ["Index", "SegId", "StructName"]
@@ -46,7 +47,7 @@ if __name__ == "__main__":
 
             # get the g-w.pct files
             gwpct_file = os.path.join(stats_dir, f"{hemi}.{atlas}.w-g.pct.stats")
-            gwpct_df_ = statsfile_to_df(gwpct_file, hemi, atlas, column_suffix="_gwpct")
+            gwpct_df_ = statsfile_to_df(gwpct_file, hemi, atlas, column_suffix="_wgpct")
             surf_and_gwpct = pd.merge(surfstat_df_, gwpct_df_)
 
             # get the g-w.pct files
@@ -61,4 +62,17 @@ if __name__ == "__main__":
     out_df = pd.concat(surfstat_dfs, axis=0, ignore_index=True)
     out_df.insert(0, "session_id", session_id)
     out_df.insert(0, "subject_id", subject_id)
+
+    def sanity_check_columns(reference_column, redundant_column, atol=0):
+        if not np.allclose(
+            out_df[reference_column], out_df[redundant_column], atol=atol):
+            raise Exception(f"The {reference_column} values were not identical to {redundant_column}")
+        out_df.drop(redundant_column, axis=1, inplace=True)
+
+    # Do some sanity checks and remove redundant columns
+    sanity_check_columns("NumVert", "NVertices_wgpct", 0)
+    sanity_check_columns("NumVert", "NVertices_piallgi", 0)
+    sanity_check_columns("SurfArea", "Area_mm2_piallgi", 1)
+    sanity_check_columns("SurfArea", "Area_mm2_wgpct", 1)
+
     out_df.to_csv(f"{subjects_dir}/{subject_id}/{subject_id}_surfacestats.tsv", sep="\t", index=False)
