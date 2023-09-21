@@ -5,7 +5,7 @@
 # of the results
 
 # USAGE:
-# collect_stats_to_tsv.sh subject_id freesurfer_dir fmriprep.sif neuromaps.sif
+# collect_stats_to_tsv.sh subject_id freesurfer_dir fmriprep.sif neuromaps.sif output_dir
 #
 #
 # subject_id:     The subject identifier. Must start with sub-. Could
@@ -25,22 +25,26 @@
 # neuromaps.sif:  Full path to the singularity/apptainer SIF file
 #                 containing neuromaps. This will be used to create
 #                 the final cifti files
+#
+# output_dir:     Path where the output files will go
 
-
-#get input for this run
+# get input for this run
 subject_id=$1
 fs_root=$2
 fmriprep_sif=$3
 neuromaps_container=$4
+output_dir=$5
 
 export SUBJECTS_DIR=${fs_root}
 subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 # Local data
-SCRIPT_DIR=$(basedir $0)
+#SCRIPT_DIR=$(basedir "$0")
+SCRIPT_DIR=/cbica/comp_space/cieslakm/freesurfer_tabulate
 annots_dir=${SCRIPT_DIR}/annots
-parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_stats.py
+parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_parcellation_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
+metadata_to_bids_script=${SCRIPT_DIR}/seg_and_metadata_to_bids.py
 subject_fs=${fs_root}/${subject_id}
 
 # CUBIC-specific stuff needed for LGI to be run outside of a container
@@ -138,7 +142,8 @@ for hemi in lh rh; do
 done
 
 # Create the tsvs for the regional stats from the parcellations
-python ${parcstats_to_tsv_script} ${subject_id}
+python ${parcstats_to_tsv_script} ${subject_id} ${native_parcs} ${parcs}
+python ${metadata_to_bids_script} ${subject_id}
 
 
 
@@ -165,3 +170,34 @@ neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B ${S
 ${neuromaps_singularity_cmd} \
   python ${to_cifti_script} \
   ${subject_fs}
+
+# Remove the malformed data from surf/
+rm -fv ${subject_fs}/surf/*malformed*
+
+# gather fsaverage mgh files
+mkdir -p "${output_dir}/${subject_id}_fsaverage"
+mv ${subject_fs}/surf/*fsaverage*mgh "${output_dir}/${subject_id}_fsaverage/"
+
+# gather the fslr cifti files
+mkdir -p "${output_dir}/${subject_id}_fsLR_den-164k"
+mv ${subject_fs}/surf/*.nii "${output_dir}/${subject_id}_fsLR_den-164k/"
+
+# Move the surface stats tsv
+mv ${subject_fs}/*surfacestats.tsv ${output_dir}/
+# Move the metadata
+mv ${SUBJECTS_DIR}/*metadata.* ${output_dir}/
+
+# Remove temp files from neuromaps
+rm -rf ${subject_fs}/trash/*
+
+# Compress the subject freesurfer directory and move it to outputs
+cd "${SUBJECTS_DIR}"
+tar cvfJ ${subject_id}_freesurfer.tar.xz ${subject_id}
+mv ${subject_id}_freesurfer.tar.xz ${output_dir}
+
+cd ${output_dir}
+tar cvfJ ${subject_id}_fsaverage.tar.xz ${subject_id}_fsaverage
+tar cvfJ ${subject_id}_fsLR_den-164k.tar.xz ${subject_id}_fsLR_den-164k
+rm -rf ${subject_id}_fsaverage ${subject_id}_fsLR_den-164k
+
+
