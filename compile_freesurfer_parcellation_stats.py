@@ -65,7 +65,8 @@ if __name__ == "__main__":
 
     def sanity_check_columns(reference_column, redundant_column, atol=0):
         if not np.allclose(
-            out_df[reference_column], out_df[redundant_column], atol=atol):
+            out_df[reference_column].astype(np.float32),
+            out_df[redundant_column].astype(np.float32), atol=atol):
             raise Exception(f"The {reference_column} values were not identical to {redundant_column}")
         out_df.drop(redundant_column, axis=1, inplace=True)
 

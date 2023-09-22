@@ -27,20 +27,21 @@
 #                 the final cifti files
 #
 # output_dir:     Path where the output files will go
-
+module load freesurfer/7.2.0
+source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
+set -e -u -x
 # get input for this run
 subject_id=$1
 fs_root=$2
 fmriprep_sif=$3
-neuromaps_container=$4
+neuromaps_sif=$4
 output_dir=$5
-
 export SUBJECTS_DIR=${fs_root}
 subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 # Local data
-#SCRIPT_DIR=$(basedir "$0")
-SCRIPT_DIR=/cbica/comp_space/cieslakm/freesurfer_tabulate
+script_name=$(realpath "$0")
+SCRIPT_DIR=$(dirname "$script_name")
 annots_dir=${SCRIPT_DIR}/annots
 parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_parcellation_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
@@ -61,6 +62,8 @@ export APPTAINER_TMPDIR=${SINGULARITY_TMPDIR}
 export APPTAINERENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash
 
 singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${HOME}/license.txt:/opt/freesurfer/license.txt ${fmriprep_sif}"
+neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B
+${SUBJECTS_DIR} -B ${SCRIPT_DIR} ${neuromaps_sif}"
 
 # Special atlases that we need to warp from fsaverage to native
 parcs="AAL CC200 CC400 glasser gordon333dil HOCPATh25 Juelich PALS_B12_Brodmann Schaefer2018_1000Parcels_17Networks_order Schaefer2018_1000Parcels_7Networks_order Schaefer2018_100Parcels_17Networks_order Schaefer2018_100Parcels_7Networks_order Schaefer2018_200Parcels_17Networks_order Schaefer2018_200Parcels_7Networks_order Schaefer2018_300Parcels_17Networks_order Schaefer2018_300Parcels_7Networks_order Schaefer2018_400Parcels_17Networks_order Schaefer2018_400Parcels_7Networks_order Schaefer2018_500Parcels_17Networks_order Schaefer2018_500Parcels_7Networks_order Schaefer2018_600Parcels_17Networks_order Schaefer2018_600Parcels_7Networks_order Schaefer2018_700Parcels_17Networks_order Schaefer2018_700Parcels_7Networks_order Schaefer2018_800Parcels_17Networks_order Schaefer2018_800Parcels_7Networks_order Schaefer2018_900Parcels_17Networks_order Schaefer2018_900Parcels_7Networks_order Slab Yeo2011_17Networks_N1000 Yeo2011_7Networks_N1000"
@@ -93,10 +96,6 @@ ${singularity_cmd} recon-all -s ${subject_id} -qcache
 # Run the lGI stuff on it. NOTE: this is not done with a container
 # because it requires matlab :(
 # CUBIC-specific stuff needed for LGI to be run outside of a container
-module load freesurfer/7.2.0
-source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
-export SUBJECTS_DIR=${fs_root}
-subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 recon-all -s ${subject_id} -localGI
 
@@ -142,10 +141,10 @@ for hemi in lh rh; do
 done
 
 # Create the tsvs for the regional stats from the parcellations
+${neuromaps_singularity_cmd} \
 python ${parcstats_to_tsv_script} ${subject_id} ${native_parcs} ${parcs}
+${neuromaps_singularity_cmd} \
 python ${metadata_to_bids_script} ${subject_id}
-
-
 
 # Get these into MGH
 ${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
@@ -166,7 +165,6 @@ do
 done
 
 # Finally, use neuromaps to go from fsaverage to fsLR164k.
-neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${to_cifti_script} ${neuromaps_sif}"
 ${neuromaps_singularity_cmd} \
   python ${to_cifti_script} \
   ${subject_fs}
