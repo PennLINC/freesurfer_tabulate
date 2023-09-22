@@ -75,4 +75,4 @@ if __name__ == "__main__":
     sanity_check_columns("SurfArea", "Area_mm2_piallgi", 1)
     sanity_check_columns("SurfArea", "Area_mm2_wgpct", 1)
 
-    out_df.to_csv(f"{subjects_dir}/{subject_id}/{subject_id}_surfacestats.tsv", sep="\t", index=False)
+    out_df.to_csv(f"{subjects_dir}/{subject_id}/{subject_id}_regionsurfacestats.tsv", sep="\t", index=False)

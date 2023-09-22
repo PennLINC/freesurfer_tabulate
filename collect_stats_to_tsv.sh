@@ -183,9 +183,9 @@ mkdir -p "${output_dir}/${subject_id}_fsLR_den-164k"
 mv ${subject_fs}/surf/*.nii "${output_dir}/${subject_id}_fsLR_den-164k/"
 
 # Move the surface stats tsv
-mv ${subject_fs}/*surfacestats.tsv ${output_dir}/
+mv ${subject_fs}/*regionsurfacestats.tsv ${output_dir}/
 # Move the metadata
-mv ${SUBJECTS_DIR}/*metadata.* ${output_dir}/
+mv ${SUBJECTS_DIR}/*brainmeasures.* ${output_dir}/
 
 # Remove temp files from neuromaps
 rm -rf ${subject_fs}/trash/*
