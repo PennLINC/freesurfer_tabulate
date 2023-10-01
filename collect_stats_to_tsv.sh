@@ -97,12 +97,14 @@ ${singularity_cmd} recon-all -s ${subject_id} -qcache
 # because it requires matlab :(
 # CUBIC-specific stuff needed for LGI to be run outside of a container
 
+set +e
 recon-all -s ${subject_id} -localGI
 
 # It may fail the first time, so try running it again:
 if [ $? -gt 0 ]; then
     recon-all -s ${subject_id} -localGI
 fi
+set -e
 
 # create the .stats files for each annot file
 for hemi in lh rh; do
