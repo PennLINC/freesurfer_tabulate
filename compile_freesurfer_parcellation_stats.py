@@ -6,6 +6,7 @@ import numpy as np
 
 hemispheres = ["lh", "rh"]
 NOSUFFIX_COLS = ["Index", "SegId", "StructName"]
+LGI_COLUMN_NAMES = ["Mean_piallgi", "StdDev_piallgi", "Min_piallgi", "Max_piallgi", "Range_piallgi"]
 
 def statsfile_to_df(stats_fname, hemi, atlas, column_suffix=""):
     with open(stats_fname, "r") as fo:
@@ -27,6 +28,7 @@ def statsfile_to_df(stats_fname, hemi, atlas, column_suffix=""):
     df.insert(0, "hemisphere", hemi)
     df.insert(0, "atlas", atlas)
     return df
+
 
 subjects_dir = os.getenv("SUBJECTS_DIR")
 if __name__ == "__main__":
@@ -52,8 +54,11 @@ if __name__ == "__main__":
 
             # get the g-w.pct files
             lgi_file = os.path.join(stats_dir, f"{hemi}.{atlas}.pial_lgi.stats")
-            lgi_df_ = statsfile_to_df(lgi_file, hemi, atlas, column_suffix="_piallgi")
-            surfstat_dfs.append(pd.merge(surf_and_gwpct, lgi_df_))
+            if os.path.exists(lgi_file):
+                lgi_df_ = statsfile_to_df(lgi_file, hemi, atlas, column_suffix="_piallgi")
+                surfstat_dfs.append(pd.merge(surf_and_gwpct, lgi_df_))
+            else:
+                surfstat_dfs.append(surf_and_gwpct)
 
     # The freesurfer directory may contain subject and session. check here
     session_id = None
@@ -72,8 +77,15 @@ if __name__ == "__main__":
 
     # Do some sanity checks and remove redundant columns
     sanity_check_columns("NumVert", "NVertices_wgpct", 0)
-    sanity_check_columns("NumVert", "NVertices_piallgi", 0)
-    sanity_check_columns("SurfArea", "Area_mm2_piallgi", 1)
     sanity_check_columns("SurfArea", "Area_mm2_wgpct", 1)
+
+    # If LGI is available, check it too
+    if "NVertices_piallgi" in out_df.columns:
+        sanity_check_columns("NumVert", "NVertices_piallgi", 0)
+        sanity_check_columns("SurfArea", "Area_mm2_piallgi", 1)
+    else:
+        # If LGI failed, fill the columns with NaNs
+        for lgi_col in LGI_COLUMN_NAMES:
+            out_df[lgi_col] = np.nan
 
     out_df.to_csv(f"{subjects_dir}/{subject_id}/{subject_id}_regionsurfacestats.tsv", sep="\t", index=False)

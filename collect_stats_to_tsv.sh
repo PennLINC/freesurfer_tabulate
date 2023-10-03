@@ -96,13 +96,14 @@ ${singularity_cmd} recon-all -s ${subject_id} -qcache
 # Run the lGI stuff on it. NOTE: this is not done with a container
 # because it requires matlab :(
 # CUBIC-specific stuff needed for LGI to be run outside of a container
+HAS_LGI=1
 
 set +e
 recon-all -s ${subject_id} -localGI
 
 # It may fail the first time, so try running it again:
 if [ $? -gt 0 ]; then
-    recon-all -s ${subject_id} -localGI
+    HAS_LGI=0
 fi
 set -e
 
@@ -132,13 +133,14 @@ for hemi in lh rh; do
                 --sum ${subject_fs}/stats/${hemi}.${parc}.w-g.pct.stats \
                 --snr
 
-            # LGI stats
-            ${singularity_cmd} \
-                mri_segstats \
-                --annot ${subject_id} ${hemi} ${parc} \
-                --in ${subject_fs}/surf/${hemi}.pial_lgi \
-                --sum ${subject_fs}/stats/${hemi}.${parc}.pial_lgi.stats
-
+            if [ $HAS_LGI -gt 0 ]; then
+                # LGI stats
+                ${singularity_cmd} \
+                    mri_segstats \
+                    --annot ${subject_id} ${hemi} ${parc} \
+                    --in ${subject_fs}/surf/${hemi}.pial_lgi \
+                    --sum ${subject_fs}/stats/${hemi}.${parc}.pial_lgi.stats
+            fi
     done
 done
 
@@ -149,7 +151,9 @@ ${neuromaps_singularity_cmd} \
 python ${metadata_to_bids_script} ${subject_id}
 
 # Get these into MGH
-${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
+if [ $HAS_LGI -gt 0 ]; then
+    ${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
+fi
 
 # Big picture here: get these mgh metrics into cifti format
 # first we have to export them from mgh to gifti. We'll use freesurfer for this
