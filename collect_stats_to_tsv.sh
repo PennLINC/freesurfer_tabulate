@@ -104,6 +104,7 @@ recon-all -s ${subject_id} -localGI
 # It may fail the first time, so try running it again:
 if [ $? -gt 0 ]; then
     HAS_LGI=0
+    find ${subject_fs} -name '*pial_lgi' -delete
 fi
 set -e
 
