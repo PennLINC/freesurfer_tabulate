@@ -3,7 +3,7 @@
 script_name=$0
 
 ## Updates to make
-# command line argument flags and usage
+# command line argument flags and usage [X]
 # take in a comma separated list of metrics
 # take in a comma separated list of aparcs
 # longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache 
@@ -35,27 +35,31 @@ of cifti metric files
 -m <metrics>: A comma separated list of metrics to generate stats and ciftis for, in addition to 
 the metrics automatically calculated by mris_anatomical_stats (number of vertices, surface area, 
 gray matter volume, average thickness, thickness std, mean curvature, gaussian curvative, folding 
-index). Metrics can include freesurfer-generated metrics w-g.pct, sulc, pial_lg, and/or 
+index). Metrics can include freesurfer-generated metrics w-g.pct, sulc, pial_lgi, and/or 
 user-specified measure(s). The user-specified measure(s) must have been projected onto both the 
 subject's native surface and the fsaverage surface (with e.g. mri_vol2surf and mri_surf2surf) and 
 must exist as .mgh files in <freesurfer_dir>/<subject_id>/surf in the format $hemi.<metric>.mgh 
 and $hemi.<metric>.fsaverage.mgh, respectively. If no additional metrics are of interest, can 
 be left blank (defaults to none) 
 
--p <parcellations>: A comma separated list of parcellations to compute stats and ciftis with. Must be either a fsnative parcellation (aparc.DKTatlas, aparc.a2009s, aparc, BA_exvivo) or one found in freesurfer_tabulate/annots (e.g., glasser, Juelich, Schaefer2018_400Parcels_7Networks_order, gordon333dil) 
+-p <parcellations>: A comma separated list of parcellations to compute stats and ciftis with, 
+in addition to the 4 atlases that come with freesurfer and exist in fsnative (aparc.DKTatlas, 
+aparc.a2009s, aparc, BA_exvivo). Parcellations can include any of the annot files found in 
+freesurfer_tabulate/annots (e.g., glasser, Juelich, Schaefer2018_400Parcels_7Networks_order).
+Can be left blank (defaults to all)
 EOF
 
 	exit 1
 }
 
-subject_id=false
-freesurfer_dir=false
-freesurfer_sif=false
-neuromaps_sif=false
-freesurfer_license=false
-output_dir=false
-metrics=none
-parcellations=false
+subject_id=false # positional argument
+freesurfer_dir=false # positional argument
+freesurfer_sif=false # positional argument
+neuromaps_sif=false # positional argument
+freesurfer_license=false # positional argument
+output_dir=false # positional argument
+metrics=none # user can specify a list of additional metrics, but defaults to none
+parcellations=AAL,CC200,CC400,glasser,gordon333dil,HOCPATh25,Juelich,PALS_B12_Brodmann,Schaefer2018_1000Parcels_17Networks_order,Schaefer2018_1000Parcels_7Networks_order,Schaefer2018_100Parcels_17Networks_order,Schaefer2018_100Parcels_7Networks_order,Schaefer2018_200Parcels_17Networks_order,Schaefer2018_200Parcels_7Networks_order,Schaefer2018_300Parcels_17Networks_order,Schaefer2018_300Parcels_7Networks_order,Schaefer2018_400Parcels_17Networks_order,Schaefer2018_400Parcels_7Networks_order,Schaefer2018_500Parcels_17Networks_order,Schaefer2018_500Parcels_7Networks_order,Schaefer2018_600Parcels_17Networks_order,Schaefer2018_600Parcels_7Networks_order,Schaefer2018_700Parcels_17Networks_order,Schaefer2018_700Parcels_7Networks_order,Schaefer2018_800Parcels_17Networks_order,Schaefer2018_800Parcels_7Networks_order,Schaefer2018_900Parcels_17Networks_order,Schaefer2018_900Parcels_7Networks_order,Slab,Yeo2011_17Networks_N1000,Yeo2011_7Networks_N1000 # user can specify a list of parcellations, but defaults to all
 
 while getopts "s:f:c:n:l:o:m:p:" opt; do
 	case $opt in 
@@ -76,9 +80,9 @@ while getopts "s:f:c:n:l:o:m:p:" opt; do
 	esac
 done
 
-if [[ "$subject_id $freesurfer_dir $freesurfer_sif $neurosynth_sif $freesurfer_license $output_dir $parcellations" =~ false ]] ; then
+if [[ "$subject_id $freesurfer_dir $freesurfer_sif $neurosynth_sif $freesurfer_license $output_dir" =~ false ]] ; then
 	echo " "
-	echo "$0 call is missing a required command line argument, one of: -s -f -c -n -l -o -p"
+	echo "$0 call is missing a required command line argument, one of: -s -f -c -n -l -o"
 	echo " "
 	usage
 	exit 1
@@ -86,10 +90,15 @@ fi
 
 set -e -u -x
 
-# get input for this run
+# Get input for this run
 fs_root=$freesurfer_dir
-if [[ $subject_id == *"long"* ]]; then
-	longitudinal_fs = TRUE
+
+if [[ ${subject_id} == *"long"* ]]; then
+	longitudinal_fs=TRUE # running on longitudinal freesurfer output
+fi
+
+if [[ ${metrics} == *"lgi"* ]]; then
+	compute_lgi=TRUE # computing lgi
 fi
 
 # Set up FreeSurfer environment 
@@ -97,38 +106,35 @@ source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
 export SUBJECTS_DIR=${fs_root}
 subject_fs=${SUBJECTS_DIR}/${subject_id}
 
-# Local data
+# Scripts and data dirs from freesurfer_tabulate repo
 SCRIPT_DIR=$(dirname "$script_name")
 annots_dir=${SCRIPT_DIR}/annots
 parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_parcellation_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
 metadata_to_bids_script=${SCRIPT_DIR}/seg_and_metadata_to_bids.py
 
-if
 # CUBIC-specific stuff needed for LGI to be run outside of a container
-module load freesurfer/7.2.0
-export SUBJECTS_DIR=${fs_root}
-subject_fs=${SUBJECTS_DIR}/${subject_id}
+if [[ ${compute_lgi} == TRUE ]]; then
+	module load freesurfer/7.2.0
+	export SUBJECTS_DIR=${fs_root}
+	subject_fs=${SUBJECTS_DIR}/${subject_id}
+fi
 
+# Set singularity params
 workdir=${subject_fs}
 export APPTAINERENV_OMP_NUM_THREADS=1
 export APPTAINERENV_NSLOTS=1
 export APPTAINERENV_ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
 export APPTAINERENV_SUBJECTS_DIR=${SUBJECTS_DIR}
 export APPTAINER_TMPDIR=${SINGULARITY_TMPDIR}
-# We're using the subject's trash directory as a temp dir for neuromaps data
-export APPTAINERENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash
-
-singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${HOME}/license.txt:/opt/freesurfer/license.txt ${fmriprep_sif}"
-neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B
-${SUBJECTS_DIR} -B ${SCRIPT_DIR} ${neuromaps_sif}"
+export APPTAINERENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash # we're using the subject's trash directory as a temp dir for neuromaps data
+singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${freesurfer_license}:/opt/freesurfer/license.txt ${freesurfer_sif}"
+neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${SCRIPT_DIR} ${neuromaps_sif}"
 
 # Special atlases that we need to warp from fsaverage to native
-parcs="AAL CC200 CC400 glasser gordon333dil HOCPATh25 Juelich PALS_B12_Brodmann Schaefer2018_1000Parcels_17Networks_order Schaefer2018_1000Parcels_7Networks_order Schaefer2018_100Parcels_17Networks_order Schaefer2018_100Parcels_7Networks_order Schaefer2018_200Parcels_17Networks_order Schaefer2018_200Parcels_7Networks_order Schaefer2018_300Parcels_17Networks_order Schaefer2018_300Parcels_7Networks_order Schaefer2018_400Parcels_17Networks_order Schaefer2018_400Parcels_7Networks_order Schaefer2018_500Parcels_17Networks_order Schaefer2018_500Parcels_7Networks_order Schaefer2018_600Parcels_17Networks_order Schaefer2018_600Parcels_7Networks_order Schaefer2018_700Parcels_17Networks_order Schaefer2018_700Parcels_7Networks_order Schaefer2018_800Parcels_17Networks_order Schaefer2018_800Parcels_7Networks_order Schaefer2018_900Parcels_17Networks_order Schaefer2018_900Parcels_7Networks_order Slab Yeo2011_17Networks_N1000 Yeo2011_7Networks_N1000"
-
+parcs=${parcellations//,/ }
 # Atlases that come from freesurfer and are already in fsnative
 native_parcs="aparc.DKTatlas aparc.a2009s aparc BA_exvivo"
-
 
 # Perform the mapping from fsaverage to native
 for hemi in lh rh; do
@@ -149,22 +155,31 @@ for hemi in lh rh; do
 done
 
 # Run qcache on this person to get the mgh files
-${singularity_cmd} recon-all -s ${subject_id} -qcache
-
-# Run the lGI stuff on it. NOTE: this is not done with a container
-# because it requires matlab :(
-# CUBIC-specific stuff needed for LGI to be run outside of a container
-HAS_LGI=1
-
-set +e
-recon-all -s ${subject_id} -localGI
-
-# It may fail the first time, so try running it again:
-if [ $? -gt 0 ]; then
-    HAS_LGI=0
-    find ${subject_fs} -name '*pial_lgi' -delete
+if [[ $longitudinal_fs == TRUE ]]; then
+	cross_sectional_id=$(echo $subject_id | cut -f 1 -d'.') #extract the cross-sectional freesurfer id $cross.long.$base
+	base_id=$(echo $subject_id | cut -f 3 -d'.') #extract the base template freesurfer id $cross.long.$base
+	${singularity_cmd} recon-all -long ${cross_sectional_id} ${base_id} -qcache
+else
+	${singularity_cmd} recon-all -s ${subject_id} -qcache
 fi
-set -e
+
+# CUBIC-specific stuff needed for LGI to be run outside of a container
+# NOTE: this is not done with a container because it requires matlab :(
+if [[ ${compute_lgi} == TRUE ]]; then
+	module load freesurfer/7.2.0
+	export SUBJECTS_DIR=${fs_root}
+	subject_fs=${SUBJECTS_DIR}/${subject_id}
+	HAS_LGI=1
+	set +e
+	recon-all -s ${subject_id} -localGI
+	# It may fail the first time, so try running it again:
+	if [ $? -gt 0 ]; then
+    	HAS_LGI=0
+    	find ${subject_fs} -name '*pial_lgi' -delete
+	fi
+	set -e
+fi
+
 
 # create the .stats files for each annot file
 for hemi in lh rh; do
