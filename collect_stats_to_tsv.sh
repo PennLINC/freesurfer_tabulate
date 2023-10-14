@@ -1,54 +1,112 @@
 #!/bin/bash
 
-# A script that will calculate surface metrics for many atlases
-# and will grab subject metadata. Creates tsv and json files
-# of the results
+script_name=$0
 
-# USAGE:
-# collect_stats_to_tsv.sh subject_id freesurfer_dir fmriprep.sif neuromaps.sif output_dir
-#
-#
-# subject_id:     The subject identifier. Must start with sub-. Could
-#                 also be sub-X_ses-Y. This is the subject ID as it
-#                 would be used for --s in most FreeSurfer programs
-#
-# freesurfer_dir: The directory that would be SUBJECTS_DIR if you
-#                 were to run this outside of a container. There
-#                 must exist a ${freesurfer_dir}/${subject_id}
-#                 directory containing surf/ label/, etc.
-#
-# fmriprep.sif:   Full path to the singularity/apptainer SIF file
-#                 containing the fmriprep used to create the
-#                 freesurfer data. Maybe a regular freesurfer sif
-#                 would work, but I haven't tested it
-#
-# neuromaps.sif:  Full path to the singularity/apptainer SIF file
-#                 containing neuromaps. This will be used to create
-#                 the final cifti files
-#
-# output_dir:     Path where the output files will go
-module load freesurfer/7.2.0
-source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
+## Updates to make
+# command line argument flags and usage
+# take in a comma separated list of metrics
+# take in a comma separated list of aparcs
+# longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache 
+
+# A script that will calculate desired surface metrics for a list of surface atlases
+# and will grab subject metadata. Creates stat tsv and json files of the results
+
+usage() {
+	cat << EOF >&2
+Usage: $script_name [-s] [-f] [-c] [-n] [-l] [-o] [-m] [-p]
+
+-s <subject_id>: The subject identifier. This is the subject's directory name in the freesurfer 
+SUBJECTS_DIR (i.e., the identifier used with --s in freesurfer commands).
+
+-f <freesurfer_dir>: The freesurfer SUBJECTS_DIR. The directory <freesurfer_dir>/<subject_id> 
+must exist with typical freesurfer outputs mri/ surf/ label/ etc.
+
+-c <freesurfer_sif>: Full path to the singularity SIF container with freesurfer. This should 
+be the exact version of freesurfer that was used to create the data in freesurfer_dir. Can be 
+a freesurfer.sif or fmriprep.sif
+
+-n <neuromaps_sif>: Full path to a singularity container for neuromaps, used for the creation 
+of cifti metric files
+
+-l <freesurfer_license>: Full path to a freesurfer license.txt
+
+-o <output_dir>: Path to where the output files will go
+
+-m <metrics>: A comma separated list of metrics to generate stats and ciftis for, in addition to 
+the metrics automatically calculated by mris_anatomical_stats (number of vertices, surface area, 
+gray matter volume, average thickness, thickness std, mean curvature, gaussian curvative, folding 
+index). Metrics can include freesurfer-generated metrics w-g.pct, sulc, pial_lg, and/or 
+user-specified measure(s). The user-specified measure(s) must have been projected onto both the 
+subject's native surface and the fsaverage surface (with e.g. mri_vol2surf and mri_surf2surf) and 
+must exist as .mgh files in <freesurfer_dir>/<subject_id>/surf in the format $hemi.<metric>.mgh 
+and $hemi.<metric>.fsaverage.mgh, respectively. If no additional metrics are of interest, can 
+be left blank (defaults to none) 
+
+-p <parcellations>: A comma separated list of parcellations to compute stats and ciftis with. Must be either a fsnative parcellation (aparc.DKTatlas, aparc.a2009s, aparc, BA_exvivo) or one found in freesurfer_tabulate/annots (e.g., glasser, Juelich, Schaefer2018_400Parcels_7Networks_order, gordon333dil) 
+EOF
+
+	exit 1
+}
+
+subject_id=false
+freesurfer_dir=false
+freesurfer_sif=false
+neuromaps_sif=false
+freesurfer_license=false
+output_dir=false
+metrics=none
+parcellations=false
+
+while getopts "s:f:c:n:l:o:m:p:" opt; do
+	case $opt in 
+		(s) subject_id=$OPTARG;;
+		(f) freesurfer_dir=$OPTARG;;
+		(c) freesurfer_sif=$OPTARG;;
+		(n) neurosynth_sif=$OPTARG;;
+		(l) freesurfer_license=$OPTARG;;
+		(o) output_dir=$OPTARG;;
+		(m) metrics=$OPTARG;;
+		(p) parcellations=$OPTARG;;
+		 *) usage;;
+	esac
+
+	case $OPTARG in
+		-) echo "Command line argument $opt needs a valid argument"
+		exit 1 ;;
+	esac
+done
+
+if [[ "$subject_id $freesurfer_dir $freesurfer_sif $neurosynth_sif $freesurfer_license $output_dir $parcellations" =~ false ]] ; then
+	echo " "
+	echo "$0 call is missing a required command line argument, one of: -s -f -c -n -l -o -p"
+	echo " "
+	usage
+	exit 1
+fi
+
 set -e -u -x
+
 # get input for this run
-subject_id=$1
-fs_root=$2
-fmriprep_sif=$3
-neuromaps_sif=$4
-output_dir=$5
+fs_root=$freesurfer_dir
+if [[ $subject_id == *"long"* ]]; then
+	longitudinal_fs = TRUE
+fi
+
+# Set up FreeSurfer environment 
+source ${FREESURFER_HOME}/SetUpFreeSurfer.sh
 export SUBJECTS_DIR=${fs_root}
 subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 # Local data
-script_name=$(realpath "$0")
 SCRIPT_DIR=$(dirname "$script_name")
 annots_dir=${SCRIPT_DIR}/annots
 parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_parcellation_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
 metadata_to_bids_script=${SCRIPT_DIR}/seg_and_metadata_to_bids.py
-subject_fs=${fs_root}/${subject_id}
 
+if
 # CUBIC-specific stuff needed for LGI to be run outside of a container
+module load freesurfer/7.2.0
 export SUBJECTS_DIR=${fs_root}
 subject_fs=${SUBJECTS_DIR}/${subject_id}
 
