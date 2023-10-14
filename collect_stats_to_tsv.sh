@@ -171,7 +171,13 @@ if [[ ${compute_lgi} == TRUE ]]; then
 	subject_fs=${SUBJECTS_DIR}/${subject_id}
 	HAS_LGI=1
 	set +e
-	recon-all -s ${subject_id} -localGI
+	if [[ $longitudinal_fs == TRUE ]]; then
+		cross_sectional_id=$(echo $subject_id | cut -f 1 -d'.') 
+		base_id=$(echo $subject_id | cut -f 3 -d'.')
+		recon-all -long ${cross_sectional_id} ${base_id} -localGI
+	else
+		recon-all -s ${subject_id} -localGI
+	fi
 	# It may fail the first time, so try running it again:
 	if [ $? -gt 0 ]; then
     	HAS_LGI=0
@@ -179,7 +185,6 @@ if [[ ${compute_lgi} == TRUE ]]; then
 	fi
 	set -e
 fi
-
 
 # create the .stats files for each annot file
 for hemi in lh rh; do
