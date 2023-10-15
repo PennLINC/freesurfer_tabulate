@@ -172,7 +172,7 @@ if [[ ${compute_lgi} == TRUE ]]; then
 		recon-all -s ${subject_id} -localGI
 	fi
 	# It may fail the first time, so try running it again:
-	if [ $? -gt 0 ]; then
+	if [[ $? -gt 0 ]]; then
     	HAS_LGI=0
     	find ${subject_fs} -name '*pial_lgi' -delete
 	fi
@@ -210,9 +210,9 @@ for hemi in lh rh; do
 				--snr
 		done
 	    fi
-
-            if  [ $HAS_LGI -gt 0 ]; then
-                # LGI stats
+	
+	    # LGI
+	    if [[ ${compute_lgi} == TRUE ]] & [[ $HAS_LGI -gt 0 ]]; then
                 ${singularity_cmd} \
                     mri_segstats \
                     --annot ${subject_id} ${hemi} ${parc} \
@@ -229,18 +229,23 @@ ${neuromaps_singularity_cmd} \
 python ${metadata_to_bids_script} ${subject_id}
 
 # Get these into MGH
-if [ $HAS_LGI -gt 0 ]; then
-    ${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
+if [[ ${compute_lgi} == TRUE ]] & [[ $HAS_LGI -gt 0 ]]; then
+	if [[ $longitudinal_fs == TRUE ]]; then
+		cross_sectional_id=$(echo $subject_id | cut -f 1 -d'.') 
+		base_id=$(echo $subject_id | cut -f 3 -d'.')
+		${singularity_cmd} recon-all -long ${cross_sectional_id} ${base_id} -qcache -measure pial_lgi
+	else
+		${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
+	fi
 fi
+	
 
-# Big picture here: get these mgh metrics into cifti format
+# Big picture here: get these MGH formatted metrics into cifti format
 # first we have to export them from mgh to gifti. We'll use freesurfer for this
-# but it will create malformed gifti files.
+# but it will create malformed gifti files :S
 cd ${subject_fs}/surf
-for hemi in lh rh
-do
-    for mgh_surf in ${hemi}*fsaverage.mgh
-    do
+for hemi in lh rh; do
+    for mgh_surf in ${hemi}*fsaverage.mgh; do
         ${singularity_cmd} mris_convert \
             -c ${PWD}/${mgh_surf} \
             ${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
