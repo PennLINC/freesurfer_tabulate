@@ -113,13 +113,6 @@ parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_parcellation_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
 metadata_to_bids_script=${SCRIPT_DIR}/seg_and_metadata_to_bids.py
 
-# CUBIC-specific stuff needed for LGI to be run outside of a container
-if [[ ${compute_lgi} == TRUE ]]; then
-	module load freesurfer/7.2.0
-	export SUBJECTS_DIR=${fs_root}
-	subject_fs=${SUBJECTS_DIR}/${subject_id}
-fi
-
 # Set singularity params
 workdir=${subject_fs}
 export APPTAINERENV_OMP_NUM_THREADS=1
@@ -194,7 +187,7 @@ for hemi in lh rh; do
             native_annot=${subject_fs}/label/${annot_name}
             stats_file=${subject_fs}/stats/${annot_name/.annot/.stats}
 
-            # Surface stats
+            # Freesurfer default anatomical stats
             ${singularity_cmd} \
                 mris_anatomical_stats \
                 -a ${native_annot} \
@@ -203,16 +196,22 @@ for hemi in lh rh; do
                 -noglobal \
                 ${subject_id} \
                 ${hemi}
+	    
+	    # User-specified metric stats
+	    if [[ $metrics != "none" ]]; then
+		user_measures=${metrics//,/ }
+		user_measures=${user_measures//"pial_lgi"/ } #remove pial_lgi from this list, handle it as a special case below
+		for measure in $user_measures; do
+			${singularity_cmd} \
+				mri_segstats \
+				--in ${subject_fs}/surf/${hemi}.${measure}.mgh \
+				--annot ${subject_id} ${hemi} ${parc} \
+				--sum ${subject_fs}/stats/${hemi}.${parc}.${measure}.stats\
+				--snr
+		done
+	    fi
 
-            # GWR stats
-            ${singularity_cmd} \
-                mri_segstats \
-                --in ${subject_fs}/surf/${hemi}.w-g.pct.mgh \
-                --annot ${subject_id} ${hemi} ${parc} \
-                --sum ${subject_fs}/stats/${hemi}.${parc}.w-g.pct.stats \
-                --snr
-
-            if [ $HAS_LGI -gt 0 ]; then
+            if  [ $HAS_LGI -gt 0 ]; then
                 # LGI stats
                 ${singularity_cmd} \
                     mri_segstats \
