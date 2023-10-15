@@ -4,9 +4,11 @@ script_name=$0
 
 ## Updates to make
 # command line argument flags and usage [X]
-# take in a comma separated list of metrics
-# take in a comma separated list of aparcs
-# longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache 
+# take in a comma separated list of metrics [X]
+# take in a comma separated list of aparcs [X]
+# longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache [X]
+# LGI processing [X] 
+# Make running anatomical_seg_stats an option? If its FALSE, don't calculate those stats, and only create ciftis for user-specified metrics
 
 # A script that will calculate desired surface metrics for a list of surface atlases
 # and will grab subject metadata. Creates stat tsv and json files of the results
@@ -237,8 +239,7 @@ if [[ ${compute_lgi} == TRUE ]] & [[ $HAS_LGI -gt 0 ]]; then
 	else
 		${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
 	fi
-fi
-	
+fi	
 
 # Big picture here: get these MGH formatted metrics into cifti format
 # first we have to export them from mgh to gifti. We'll use freesurfer for this
@@ -246,14 +247,16 @@ fi
 cd ${subject_fs}/surf
 for hemi in lh rh; do
     for mgh_surf in ${hemi}*fsaverage.mgh; do
-        ${singularity_cmd} mris_convert \
-            -c ${PWD}/${mgh_surf} \
-            ${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
-            ${PWD}/${mgh_surf/.mgh/.malformed.shape.gii}
+	    if [[ $mgh_surf != *"fwhm"* ]]; then #not resampling smoothed data (fwhm 0, 5, 10, 15, 20, 25) to cifti. smooth output with -cifti-smoothing
+        	${singularity_cmd} mris_convert \
+            	-c ${PWD}/${mgh_surf} \
+            	${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
+            	${PWD}/${mgh_surf/.mgh/.malformed.shape.gii}
+	    fi
     done
 done
 
-# Finally, use neuromaps to go from fsaverage to fsLR164k.
+# Finally, use neuromaps to go from fsaverage to fsLR164k
 ${neuromaps_singularity_cmd} \
   python ${to_cifti_script} \
   ${subject_fs}
