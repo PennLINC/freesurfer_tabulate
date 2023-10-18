@@ -63,10 +63,10 @@ if __name__ == "__main__":
     # The freesurfer directory may contain subject and session. check here
     session_id = None
     if "_" in subject_id:
-        subject_id, session_id = subject_id.split("_")
+        subject_id_only, session_id = subject_id.split("_")
     out_df = pd.concat(surfstat_dfs, axis=0, ignore_index=True)
     out_df.insert(0, "session_id", session_id)
-    out_df.insert(0, "subject_id", subject_id)
+    out_df.insert(0, "subject_id", subject_id_only)
 
     def sanity_check_columns(reference_column, redundant_column, atol=0):
         if not np.allclose(
