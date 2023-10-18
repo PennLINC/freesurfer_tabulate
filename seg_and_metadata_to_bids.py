@@ -145,10 +145,10 @@ if __name__ == "__main__":
     session_id = None
     subject_id = fs_dirname
     if "_" in fs_dirname:
-        subject_id, session_id = fs_dirname.split("_")
+        subject_id_only, session_id = fs_dirname.split("_")
 
     fs_audit = {
-        "subject_id": {"value": subject_id,
+        "subject_id": {"value": subject_id_only,
                        "meta": "BIDS subject id"},
         "session_id": {"value": session_id,
                        "meta": "BIDS session id"}
