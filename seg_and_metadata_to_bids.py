@@ -53,7 +53,7 @@ def read_stats(stats_name, source_id, info, get_measures=False, measures_only=Fa
     Returns: Nothing. the info dict gets keys/values added to it
 
     """
-    stats_file = fs_root / subject_id / "stats" / stats_name
+    stats_file = fs_root / fs_dirname / "stats" / stats_name
     if not stats_file.exists():
         raise Exception(str(stats_file) + "does not exist")
 
