@@ -62,6 +62,7 @@ if __name__ == "__main__":
 
     # The freesurfer directory may contain subject and session. check here
     session_id = None
+    subject_id_only = subject_id
     if "_" in subject_id:
         subject_id_only, session_id = subject_id.split("_")
     out_df = pd.concat(surfstat_dfs, axis=0, ignore_index=True)
