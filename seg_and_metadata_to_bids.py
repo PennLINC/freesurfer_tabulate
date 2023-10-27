@@ -143,7 +143,7 @@ if __name__ == "__main__":
     fs_dirname = sys.argv[1]
 
     session_id = None
-    subject_id = fs_dirname
+    subject_id_only = fs_dirname
     if "_" in fs_dirname:
         subject_id_only, session_id = fs_dirname.split("_")
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
         "session_id": {"value": session_id,
                        "meta": "BIDS session id"}
     }
-    fs_audit.update(get_euler_from_log(subject_id))
+    fs_audit.update(get_euler_from_log(fs_dirname))
 
     # Add global stats from two of the surface stats files
     read_stats("lh.aparc.pial.stats", "Pial", fs_audit,
