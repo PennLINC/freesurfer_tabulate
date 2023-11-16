@@ -97,6 +97,8 @@ fs_root=$freesurfer_dir
 
 if [[ ${subject_id} == *"long"* ]]; then
 	longitudinal_fs=TRUE # running on longitudinal freesurfer output
+	cross_sectional_id=$(echo ${subject_id} | cut -f 1 -d'.') #extract the cross-sectional freesurfer id from $cross.long.$base
+	base_id=$(echo ${subject_id} | cut -f 3 -d'.') #extract the base template freesurfer id from $cross.long.$base
 fi
 
 if [[ ${metrics} == *"lgi"* ]]; then
@@ -110,6 +112,7 @@ subject_fs=${SUBJECTS_DIR}/${subject_id}
 
 # Scripts and data dirs from freesurfer_tabulate repo
 SCRIPT_DIR=$(dirname "$script_name")
+SCRIPT_DIR=$(realpath $SCRIPT_DIR) #expand full path of script dir so we can bind full (instead of relative) path to the container
 annots_dir=${SCRIPT_DIR}/annots
 parcstats_to_tsv_script=${SCRIPT_DIR}/compile_freesurfer_parcellation_stats.py
 to_cifti_script=${SCRIPT_DIR}/vertex_measures_to_cifti.py
@@ -117,12 +120,12 @@ metadata_to_bids_script=${SCRIPT_DIR}/seg_and_metadata_to_bids.py
 
 # Set singularity params
 workdir=${subject_fs}
-export APPTAINERENV_OMP_NUM_THREADS=1
-export APPTAINERENV_NSLOTS=1
-export APPTAINERENV_ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
-export APPTAINERENV_SUBJECTS_DIR=${SUBJECTS_DIR}
-export APPTAINER_TMPDIR=${SINGULARITY_TMPDIR}
-export APPTAINERENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash # we're using the subject's trash directory as a temp dir for neuromaps data
+export SINGULARITYENV_OMP_NUM_THREADS=1
+export SINGULARITYENV_NSLOTS=1
+export SINGULARITYENV_ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
+export SINGULARITYERENV_SUBJECTS_DIR=${SUBJECTS_DIR}
+export SINGULARITY_TMPDIR=${SINGULARITY_TMPDIR}
+export SINGULARITYENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash # we're using the subject's trash directory as a temp dir for neuromaps data
 singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${freesurfer_license}:/opt/freesurfer/license.txt ${freesurfer_sif}"
 neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${SCRIPT_DIR} ${neuromaps_sif}"
 
@@ -151,8 +154,6 @@ done
 
 # Run qcache on this person to get the mgh files
 if [[ $longitudinal_fs == TRUE ]]; then
-	cross_sectional_id=$(echo $subject_id | cut -f 1 -d'.') #extract the cross-sectional freesurfer id $cross.long.$base
-	base_id=$(echo $subject_id | cut -f 3 -d'.') #extract the base template freesurfer id $cross.long.$base
 	${singularity_cmd} recon-all -long ${cross_sectional_id} ${base_id} -qcache
 else
 	${singularity_cmd} recon-all -s ${subject_id} -qcache
@@ -167,8 +168,6 @@ if [[ ${compute_lgi} == TRUE ]]; then
 	HAS_LGI=1
 	set +e
 	if [[ $longitudinal_fs == TRUE ]]; then
-		cross_sectional_id=$(echo $subject_id | cut -f 1 -d'.') 
-		base_id=$(echo $subject_id | cut -f 3 -d'.')
 		recon-all -long ${cross_sectional_id} ${base_id} -localGI
 	else
 		recon-all -s ${subject_id} -localGI
@@ -214,7 +213,7 @@ for hemi in lh rh; do
 	    fi
 	
 	    # LGI
-	    if [[ ${compute_lgi} == TRUE ]] & [[ $HAS_LGI -gt 0 ]]; then
+	    if [[ ${compute_lgi} == TRUE ]] && [[ $HAS_LGI -gt 0 ]]; then
                 ${singularity_cmd} \
                     mri_segstats \
                     --annot ${subject_id} ${hemi} ${parc} \
@@ -231,10 +230,8 @@ ${neuromaps_singularity_cmd} \
 python ${metadata_to_bids_script} ${subject_id}
 
 # Get these into MGH
-if [[ ${compute_lgi} == TRUE ]] & [[ $HAS_LGI -gt 0 ]]; then
+if [[ ${compute_lgi} == TRUE ]] && [[ $HAS_LGI -gt 0 ]]; then
 	if [[ $longitudinal_fs == TRUE ]]; then
-		cross_sectional_id=$(echo $subject_id | cut -f 1 -d'.') 
-		base_id=$(echo $subject_id | cut -f 3 -d'.')
 		${singularity_cmd} recon-all -long ${cross_sectional_id} ${base_id} -qcache -measure pial_lgi
 	else
 		${singularity_cmd} recon-all -s ${subject_id} -qcache -measure pial_lgi
@@ -274,6 +271,7 @@ mv ${subject_fs}/surf/*.nii "${output_dir}/${subject_id}_fsLR_den-164k/"
 
 # Move the surface stats tsv
 mv ${subject_fs}/*regionsurfacestats.tsv ${output_dir}/
+
 # Move the metadata
 mv ${SUBJECTS_DIR}/*brainmeasures.* ${output_dir}/
 
@@ -289,5 +287,4 @@ cd ${output_dir}
 tar cvfJ ${subject_id}_fsaverage.tar.xz ${subject_id}_fsaverage
 tar cvfJ ${subject_id}_fsLR_den-164k.tar.xz ${subject_id}_fsLR_den-164k
 rm -rf ${subject_id}_fsaverage ${subject_id}_fsLR_den-164k
-
 
