@@ -62,8 +62,11 @@ if __name__ == "__main__":
 
     # The freesurfer directory may contain subject and session. check here
     session_id = None
+    subject_id_fs = subject_id #retain original freesurfer id for writing output csv
     if "_" in subject_id:
         subject_id, session_id = subject_id.split("_")
+    if "long" in session_id:
+        session_id, long, base = session_id.split(".")
     out_df = pd.concat(surfstat_dfs, axis=0, ignore_index=True)
     out_df.insert(0, "session_id", session_id)
     out_df.insert(0, "subject_id", subject_id)
@@ -88,4 +91,4 @@ if __name__ == "__main__":
         for lgi_col in LGI_COLUMN_NAMES:
             out_df[lgi_col] = np.nan
 
-    out_df.to_csv(f"{subjects_dir}/{subject_id}/{subject_id}_regionsurfacestats.tsv", sep="\t", index=False)
+    out_df.to_csv(f"{subjects_dir}/{subject_id_fs}/stats/{subject_id}_{session_id}_regionsurfacestats.tsv", sep="\t", index=False)
