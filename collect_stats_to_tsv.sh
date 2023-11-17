@@ -69,7 +69,7 @@ while getopts "s:f:c:n:l:o:m:p:" opt; do
 		(s) subject_id=$OPTARG;;
 		(f) freesurfer_dir=$OPTARG;;
 		(c) freesurfer_sif=$OPTARG;;
-		(n) neurosynth_sif=$OPTARG;;
+		(n) neuromaps_sif=$OPTARG;;
 		(l) freesurfer_license=$OPTARG;;
 		(o) output_dir=$OPTARG;;
 		(m) metrics=$OPTARG;;
@@ -83,7 +83,7 @@ while getopts "s:f:c:n:l:o:m:p:" opt; do
 	esac
 done
 
-if [[ "$subject_id $freesurfer_dir $freesurfer_sif $neurosynth_sif $freesurfer_license $output_dir" =~ false ]] ; then
+if [[ "$subject_id $freesurfer_dir $freesurfer_sif $neuromaps_sif $freesurfer_license $output_dir" =~ false ]] ; then
 	echo " "
 	echo "$0 call is missing a required command line argument, one of: -s -f -c -n -l -o"
 	echo " "
@@ -91,7 +91,7 @@ if [[ "$subject_id $freesurfer_dir $freesurfer_sif $neurosynth_sif $freesurfer_l
 	exit 1
 fi
 
-set -e -u -x
+#set -e -u -x
 
 # Get input for this run
 fs_root=$freesurfer_dir
@@ -251,7 +251,7 @@ fi
 cd ${subject_fs}/surf
 for hemi in lh rh; do
     for mgh_surf in ${hemi}*fsaverage.mgh; do
-	    if [[ $mgh_surf != *"fwhm"* ]]; then #not resampling smoothed data (fwhm 0, 5, 10, 15, 20, 25) to cifti. smooth output with -cifti-smoothing
+	    if [[ $mgh_surf != *"fwhm"*5* ]]; then #not resampling smoothed data (fwhm 0, 5, 10, 15, 20, 25) to cifti. smooth output with -cifti-smoothing
         	${singularity_cmd} mris_convert \
             	-c ${PWD}/${mgh_surf} \
             	${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
