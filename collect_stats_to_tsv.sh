@@ -255,7 +255,7 @@ for hemi in lh rh; do
         	${singularity_cmd} mris_convert \
             	-c ${PWD}/${mgh_surf} \
             	${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
-            	${PWD}/${mgh_surf/.mgh/.malformed.shape.gii}
+            	${PWD}/${mgh_surf/%.mgh/.malformed.shape.gii}
 	    fi
     done
 done
