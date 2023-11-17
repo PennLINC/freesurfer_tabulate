@@ -254,7 +254,7 @@ done
 
 # Finally, use neuromaps to go from fsaverage to fsLR164k
 ${neuromaps_singularity_cmd} \
-  python ${to_cifti_script} \ 
+  python ${to_cifti_script} \
   ${subject_fs}
 
 # Remove the malformed data from surf/
