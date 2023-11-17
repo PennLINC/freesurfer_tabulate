@@ -2,17 +2,9 @@
 
 script_name=$0
 
-## Updates to make
-# command line argument flags and usage [X]
-# take in a comma separated list of metrics [X]
-# make compile_freesurfer_parcellation_stats.py compatible with user-specified metrics []
-# take in a comma separated list of aparcs [X]
-# longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache [X] and update parcellation stats python script to record correct session / output into longitudinal dir [X]
-# LGI processing [X] 
-# Make running anatomical_seg_stats an option? If its FALSE, don't calculate those stats, and only create ciftis for user-specified metrics
-
 # A script that will calculate desired surface metrics for a list of surface atlases
-# and will grab subject metadata. Creates stat tsv and json files of the results
+# and will grab subject metadata. Creates stat tsv and json files of the results.
+# Also creates cifti dscalar.nii files for desired surface metrics at 164k resolution.
 
 usage() {
 	cat << EOF >&2
@@ -232,9 +224,9 @@ if [[ ${compute_lgi} == TRUE ]]; then #indicate whether LGI calculation was atte
 	export SINGULARITYENV_LGI=${compute_lgi}
 fi	
 ${neuromaps_singularity_cmd} \
-python ${parcstats_to_tsv_script} ${subject_id} ${native_parcs} ${parcs}
+python ${parcstats_to_tsv_script} ${subject_id} ${native_parcs} ${parcs} #parcellation stats tsv
 ${neuromaps_singularity_cmd} \
-python ${metadata_to_bids_script} ${subject_id}
+python ${metadata_to_bids_script} ${subject_id} #metadata
 
 # Get these into MGH
 if [[ ${compute_lgi} == TRUE ]] && [[ $HAS_LGI -gt 0 ]]; then
@@ -251,7 +243,7 @@ fi
 cd ${subject_fs}/surf
 for hemi in lh rh; do
     for mgh_surf in ${hemi}*fsaverage.mgh; do
-	    if [[ $mgh_surf != *"fwhm"*5* ]]; then #not resampling smoothed data (fwhm 0, 5, 10, 15, 20, 25) to cifti. smooth output with -cifti-smoothing
+	    if [[ $mgh_surf != *"fwhm"*5* ]]; then #not resampling all smoothed data (not fwhm 5, 15,25) to cifti. smooth output with -cifti-smoothing
         	${singularity_cmd} mris_convert \
             	-c ${PWD}/${mgh_surf} \
             	${SUBJECTS_DIR}/fsaverage/surf/${hemi}.white \
@@ -262,7 +254,7 @@ done
 
 # Finally, use neuromaps to go from fsaverage to fsLR164k
 ${neuromaps_singularity_cmd} \
-  python ${to_cifti_script} \
+  python ${to_cifti_script} \ 
   ${subject_fs}
 
 # Remove the malformed data from surf/
