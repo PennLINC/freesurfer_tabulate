@@ -31,6 +31,10 @@ def statsfile_to_df(stats_fname, hemi, atlas, column_suffix=""):
 
 
 subjects_dir = os.getenv("SUBJECTS_DIR")
+metrics = os.getenv("user_measures")
+lgi = os.getenv("LGI")
+if metrics:
+    metrics = metrics.split(" ")
 if __name__ == "__main__":
     subject_id = sys.argv[1]
     atlases = sys.argv[2:]
@@ -43,22 +47,27 @@ if __name__ == "__main__":
         for hemi in hemispheres:
             print(f"   {hemi}")
 
-            # Get the surface statistics
+            # get the surface statistics
+            print("     anatomical stats")
             surfstats_file = os.path.join(stats_dir, f"{hemi}.{atlas}.stats")
             surfstat_df_ = statsfile_to_df(surfstats_file, hemi, atlas)
 
-            # get the g-w.pct files
-            gwpct_file = os.path.join(stats_dir, f"{hemi}.{atlas}.w-g.pct.stats")
-            gwpct_df_ = statsfile_to_df(gwpct_file, hemi, atlas, column_suffix="_wgpct")
-            surf_and_gwpct = pd.merge(surfstat_df_, gwpct_df_)
+            # get statistics for user-specified metrics
+            if metrics:
+                for metric in metrics:
+                    print(f"     {metric}")
+                    userstat_file = os.path.join(stats_dir, f"{hemi}.{atlas}.{metric}.stats")
+                    userstat_df_ = statsfile_to_df(userstat_file, hemi, atlas, column_suffix=f"_{metric}")
+                    surfstat_df_ = pd.merge(surfstat_df_, userstat_df_)
 
-            # get the g-w.pct files
+            # get LGI statistics 
             lgi_file = os.path.join(stats_dir, f"{hemi}.{atlas}.pial_lgi.stats")
             if os.path.exists(lgi_file):
+                print("     lgi stats")
                 lgi_df_ = statsfile_to_df(lgi_file, hemi, atlas, column_suffix="_piallgi")
-                surfstat_dfs.append(pd.merge(surf_and_gwpct, lgi_df_))
+                surfstat_dfs.append(pd.merge(surfstat_df_, lgi_df_))
             else:
-                surfstat_dfs.append(surf_and_gwpct)
+                surfstat_dfs.append(surfstat_df_)
 
     # The freesurfer directory may contain subject and session. check here
     session_id = None
@@ -79,16 +88,19 @@ if __name__ == "__main__":
         out_df.drop(redundant_column, axis=1, inplace=True)
 
     # Do some sanity checks and remove redundant columns
-    sanity_check_columns("NumVert", "NVertices_wgpct", 0)
-    sanity_check_columns("SurfArea", "Area_mm2_wgpct", 1)
+    if metrics:
+        for metric in metrics:
+            sanity_check_columns("NumVert", f"NVertices_{metric}", 0)
+            sanity_check_columns("SurfArea", f"Area_mm2_{metric}", 1)
 
     # If LGI is available, check it too
     if "NVertices_piallgi" in out_df.columns:
         sanity_check_columns("NumVert", "NVertices_piallgi", 0)
         sanity_check_columns("SurfArea", "Area_mm2_piallgi", 1)
     else:
-        # If LGI failed, fill the columns with NaNs
-        for lgi_col in LGI_COLUMN_NAMES:
-            out_df[lgi_col] = np.nan
+        # If LGI failed and lgi environment variable is set to TRUE, fill the columns with NaNs
+        if lgi:
+            for lgi_col in LGI_COLUMN_NAMES:
+                out_df[lgi_col] = np.nan
 
     out_df.to_csv(f"{subjects_dir}/{subject_id_fs}/stats/{subject_id}_{session_id}_regionsurfacestats.tsv", sep="\t", index=False)

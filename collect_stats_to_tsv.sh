@@ -5,8 +5,9 @@ script_name=$0
 ## Updates to make
 # command line argument flags and usage [X]
 # take in a comma separated list of metrics [X]
+# make compile_freesurfer_parcellation_stats.py compatible with user-specified metrics []
 # take in a comma separated list of aparcs [X]
-# longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache [X]
+# longitudinal freesurfer processing -- will need to update qcache call to reconall -long cross-subject basesubject -qcache [X] and update parcellation stats python script to record correct session / output into longitudinal dir [X]
 # LGI processing [X] 
 # Make running anatomical_seg_stats an option? If its FALSE, don't calculate those stats, and only create ciftis for user-specified metrics
 
@@ -123,7 +124,7 @@ workdir=${subject_fs}
 export SINGULARITYENV_OMP_NUM_THREADS=1
 export SINGULARITYENV_NSLOTS=1
 export SINGULARITYENV_ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=1
-export SINGULARITYERENV_SUBJECTS_DIR=${SUBJECTS_DIR}
+export SINGULARITYENV_SUBJECTS_DIR=${SUBJECTS_DIR}
 export SINGULARITY_TMPDIR=${SINGULARITY_TMPDIR}
 export SINGULARITYENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash # we're using the subject's trash directory as a temp dir for neuromaps data
 singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${freesurfer_license}:/opt/freesurfer/license.txt ${freesurfer_sif}"
@@ -224,6 +225,12 @@ for hemi in lh rh; do
 done
 
 # Create the tsvs for the regional stats from the parcellations
+if [[ $metrics != "none" ]]; then #export user-defined metrics as a singularity environment variable to be accessible in parcstats_to_tsv_script
+	export SINGULARITYENV_user_measures=${user_measures}
+fi
+if [[ ${compute_lgi} == TRUE ]]; then #indicate whether LGI calculation was attempted as a singularity environment variable 
+	export SINGULARITYENV_LGI=${compute_lgi}
+fi	
 ${neuromaps_singularity_cmd} \
 python ${parcstats_to_tsv_script} ${subject_id} ${native_parcs} ${parcs}
 ${neuromaps_singularity_cmd} \
