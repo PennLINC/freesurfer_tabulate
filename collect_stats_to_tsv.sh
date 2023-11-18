@@ -28,9 +28,8 @@ of cifti metric files
 -o <output_dir>: Path to where the output files will go
 
 -m <metrics>: A comma separated list of metrics to generate stats and ciftis for, in addition to 
-the metrics automatically calculated by mris_anatomical_stats (number of vertices, surface area, 
-gray matter volume, average thickness, thickness std, mean curvature, gaussian curvative, folding 
-index). Metrics can include freesurfer-generated metrics w-g.pct, sulc, pial_lgi, and/or 
+the metrics automatically calculated by mris_anatomical_stats (e.g., area, volume, thickness, 
+curvature, sulc). Metrics can include freesurfer-generated metrics w-g.pct and pial_lgi, and/or 
 user-specified measure(s). The user-specified measure(s) must have been projected onto both the 
 subject's native surface and the fsaverage surface (with e.g. mri_vol2surf and mri_surf2surf) and 
 must exist as .mgh files in <freesurfer_dir>/<subject_id>/surf in the format $hemi.<metric>.mgh 
