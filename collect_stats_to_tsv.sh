@@ -61,8 +61,8 @@ export APPTAINER_TMPDIR=${SINGULARITY_TMPDIR}
 # We're using the subject's trash directory as a temp dir for neuromaps data
 export APPTAINERENV_NEUROMAPS_DATA=${SUBJECTS_DIR}/${subject_id}/trash
 
-singularity_cmd="singularity exec --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${HOME}/license.txt:/opt/freesurfer/license.txt ${fmriprep_sif}"
-neuromaps_singularity_cmd="singularity exec --containall --writable-tmpfs -B
+singularity_cmd="singularity exec -e --containall --writable-tmpfs -B ${SUBJECTS_DIR} -B ${annots_dir} -B ${HOME}/license.txt:/opt/freesurfer/license.txt ${fmriprep_sif}"
+neuromaps_singularity_cmd="singularity exec -e --containall --writable-tmpfs -B
 ${SUBJECTS_DIR} -B ${SCRIPT_DIR} ${neuromaps_sif}"
 
 # Special atlases that we need to warp from fsaverage to native
